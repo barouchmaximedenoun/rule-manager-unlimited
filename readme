@@ -1,0 +1,60 @@
+Security Rules Backend
+Prerequisites
+Node.js (v16+ recommended)
+
+MongoDB running locally or remotely (with replica set if needed)
+
+Setup
+Clone the repo and go to the backend folder
+
+bash
+Copy
+Edit
+git clone <your-repo-url>
+cd <backend-folder>
+Install dependencies
+
+bash
+Copy
+Edit
+npm install
+Create a .env file with your database URL
+
+ini
+Copy
+Edit
+DATABASE_URL="mongodb://localhost:27018/rulesdb"
+Generate Prisma client
+
+bash
+Copy
+Edit
+npx prisma generate
+Build the project
+
+bash
+Copy
+Edit
+npm run build
+Running the server
+For development (with auto reload):
+
+bash
+Copy
+Edit
+npm run dev
+For production:
+
+bash
+Copy
+Edit
+npm start
+What it does
+Automatically creates a default rule with a very high priority if none exists
+
+Provides API to:
+
+Get paginated rules (GET /rules?page=1)
+
+Bulk save rules (POST /rules/bulk-save) — default rule can’t be modified
+

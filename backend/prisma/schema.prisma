@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Rule {
+  id          String   @id @map("_id") @default(auto()) @db.ObjectId
+  action      String
+  name        String
+  sources     Source[]
+  destinations Destination[]
+  priority    Float
+  timestamp   Int
+}
+
+model Source {
+  id    String @id @map("_id") @default(auto()) @db.ObjectId
+  name  String
+  email String
+  rule  Rule?  @relation(fields: [ruleId], references: [id])
+  ruleId String?
+}
+
+model Destination {
+  id      String @id @map("_id") @default(auto()) @db.ObjectId
+  name    String
+  email   String 
+  rule    Rule?  @relation(fields: [ruleId], references: [id])
+  ruleId  String?
+}

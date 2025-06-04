@@ -4,14 +4,22 @@ import rulesRouter from './routes/rules';
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { createDummyRules } from './utils/createDummyRules';
-
+const cors = require('cors');
+import cookieParser from 'cookie-parser';
 
 const app = express();
 const prisma = new PrismaClient();
 
 app.use(express.json());
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4001;
+
+app.use(cookieParser());
+
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
 
 app.use(rulesRouter);
 
@@ -25,6 +33,7 @@ async function ensureDefaultRule() {
     if (!defaultRule) {
       await prisma.rule.create({
         data: {
+          tenantId: null,
           name: 'Allow',
           action: 'default-action', // adapte selon ton cas
           priority: DEFAULT_PRIORITY,

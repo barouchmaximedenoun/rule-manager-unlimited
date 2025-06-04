@@ -1,6 +1,8 @@
 import { prisma, Prisma } from '../db'; 
 
-export async function bulkSaveRules(modifiedRules: any[]) {
+export async function bulkSaveRules(modifiedRules: any[], tenantId: string) {
+
+
     const operations: Prisma.PrismaPromise<any>[] = [];
   
     for (const rule of modifiedRules) {
@@ -24,24 +26,26 @@ export async function bulkSaveRules(modifiedRules: any[]) {
             destinations: { deleteMany: {}, create: destData },
           },
           create: {
+            tenantId: tenantId || null,
             action: rule.action,
             name: rule.name,
             priority: rule.priority,
             timestamp: rule.timestamp,
             sources: { create: sourceData },
             destinations: { create: destData },
-          },
+          } as Prisma.RuleCreateInput,
         }));
       } else {
         operations.push(prisma.rule.create({
           data: {
+            tenantId: tenantId || null,
             action: rule.action,
             name: rule.name,
             priority: rule.priority,
             timestamp: rule.timestamp,
             sources: { create: sourceData },
             destinations: { create: destData },
-          },
+          } as Prisma.RuleCreateInput,
         }));
       }
     }

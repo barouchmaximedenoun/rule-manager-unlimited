@@ -17,8 +17,9 @@ interface RuleDialogProps {
   onAddDestination: () => void;
   onSave: () => void;
   isEdit: boolean;
-  minPriority: number;
-  maxPriority: number;
+  minPriority?: number;
+  maxPriority?: number;
+  error?: string | null;
 }
 
 export function RuleDialog({
@@ -32,7 +33,13 @@ export function RuleDialog({
   isEdit,
   minPriority,
   maxPriority,
+  error,
 }: RuleDialogProps) {
+  let priorityRange: string = ''
+  if(minPriority !== undefined && maxPriority !== undefined) {
+    priorityRange = `(${minPriority}-${maxPriority})`;
+  } 
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-white">
@@ -42,10 +49,10 @@ export function RuleDialog({
           <Input
             type="number"
             name="displayPriority"
-            placeholder={`Priority (${minPriority}-${maxPriority})`}
+            placeholder={`Priority (${priorityRange})`}
             value={rule.displayPriority}
-            min={minPriority}
-            max={maxPriority}
+            {...(minPriority !== undefined && maxPriority !== undefined ? { min: minPriority } : {})}
+            {...(minPriority !== undefined && maxPriority !== undefined ? { max: maxPriority } : {})}
             onChange={(e) => onChange(e)}
           />
 
@@ -115,7 +122,11 @@ export function RuleDialog({
               Add Destination
             </Button>
           </div>
-
+          {error && (
+            <div className="text-red-500 bg-red-100 p-2 rounded text-sm">
+              {error}
+            </div>
+          )}
           <Button onClick={onSave}>Save</Button>
         </div>
       </DialogContent>

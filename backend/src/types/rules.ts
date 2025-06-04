@@ -12,7 +12,7 @@ export type RuleAction = "Allow" | "Block";
 
 export type Rule = {
   id?: string; // UUID
-  //tenantId: string;
+  tenantId?: string | null;  // nullable
   name: string;
   sources: Source[];
   destinations: Destination[];

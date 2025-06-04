@@ -1,32 +1,54 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RuleTable } from "@/features/rules/components/RuleTable";
 import { RuleDialog } from "@/features/rules/components/RuleDialog";
 import { useRuleHandlers } from "@/features/rules/hooks/useRuleHandlers";
 import DummyRulesGenerator from "./features/rules/components/DummyRuleGenerator";
 import { Toaster } from "@/components/ui/toaster";
+import { useAuth } from "./hooks/useAuth";
+import axios from "axios";
+import Login from "./features/login/components/Login";
+
 
 export default function App() {
+  const { tenantId, logout } = useAuth();
+
+  if (!tenantId) {
+    return <Login />;
+  }
+
+  const handleLogout = async () => {
+    await axios.post("/api/logout", {}, { withCredentials: true });
+    logout();
+  };
+
   const {
-    visibleRules, error, dialogOpen, ruleForm, editTarget, isSaving,
-    currentPage, pageSize, setPageSize, minPriority, maxPriority,
+    visibleRules, error, dialogError, dialogOpen, ruleForm, editTarget, isSaving,
+    currentPage, pageSize, setPageSize,
     hasPendingChanges, hasMaxPendingChanges,
     loadPage, setDialogOpen,
     handleEditRule, handleDeleteRule, handleMoveRule,
     handleAddRuleClick, handleRuleFormChange,
     handleAddSource, handleAddDestination, handleDialogSave,
     handleSaveChanges, handleClearChanges,
-    handlePrevPage, handleNextPage,
+    handlePrevPage, handleNextPage, 
   } = useRuleHandlers();
 
+  const prevPageRef = useRef<number | undefined>(undefined);
+
   useEffect(() => {
-    loadPage(currentPage);
+    const prevPage = prevPageRef.current;
+    prevPageRef.current = currentPage;
+    loadPage(prevPage, currentPage);
   }, [currentPage, loadPage]);
 
   return (
   <div className="m-8">
     <div>
-      <h1>Security Rules Manager</h1>
+      <div className="flex justify-between items-center mb-4">
+      <h1 className="text-xl font-bold">Security Rules Manager</h1>
+      <Button variant="outline" onClick={handleLogout}>Logout</Button>
+    </div>
       {error && <div style={{ color: "red" }}>{error}</div>}
 
       <DummyRulesGenerator />
@@ -84,8 +106,7 @@ export default function App() {
         onAddDestination={handleAddDestination}
         onSave={handleDialogSave}
         isEdit={!!editTarget}
-        minPriority={minPriority}
-        maxPriority={maxPriority}
+        error={dialogError} 
       />
     </div>
     <Toaster />

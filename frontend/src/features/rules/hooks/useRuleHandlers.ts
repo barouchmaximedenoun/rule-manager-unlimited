@@ -1,5 +1,5 @@
 // useRuleHandlers.ts
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { RuleUI } from "../types/ruleTypes";
 import { useRuleManager } from "./useRuleManager";
 
@@ -25,17 +25,16 @@ export function useRuleHandlers() {
   const [editTarget, setEditTarget] = useState<RuleUI | null>(null);
   const [ruleForm, setRuleForm] = useState<RuleUI | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const minPriority = Math.min(((currentPage - 1) * pageSize) + 1, rules.length);
-  const maxPriority = Math.min(currentPage * pageSize, rules.length);
+  const minDisplayPriority = useMemo(() => ((currentPage - 1) * pageSize) + 1, [currentPage, pageSize]);
   const visibleRules = rules.slice(0, pageSize);
 
 
-  const loadPage = useCallback(async (page: number) => {
-    console.log("useEffect triggered", currentPage);
+  const loadPage = useCallback(async (prevPage: number | undefined, page: number) => {
     try {
-      await fetchPage(page);
+      await fetchPage(prevPage, page);
       setError(null);
     } catch (e: any) {
       setError(e.message);
@@ -43,6 +42,7 @@ export function useRuleHandlers() {
   }, [fetchPage]);
 
   const handleEditRule = useCallback((rule: RuleUI) => {
+    setDialogError(null);
     setEditTarget(rule);
     setRuleForm({ ...rule });
     setDialogOpen(true);
@@ -57,9 +57,9 @@ export function useRuleHandlers() {
     }
   }, [moveRule]);
 
-  const handleDeleteRule = useCallback((id: string) => {
+  const handleDeleteRule = useCallback(async (id: string) => {
     try {
-      deleteRule(id);
+      await deleteRule(id);
       setError(null);
     } catch (e: any) {
       setError(e.message);
@@ -67,6 +67,7 @@ export function useRuleHandlers() {
   }, [deleteRule]);
 
   const handleAddRuleClick = useCallback(() => {
+    setDialogError(null);
     setEditTarget(null);
     setRuleForm({
       tempId: `temp-${Date.now()}`,
@@ -74,15 +75,16 @@ export function useRuleHandlers() {
       action: "Allow",
       sources: [],
       destinations: [],
-      displayPriority: minPriority,
+      displayPriority: minDisplayPriority,
       isLastRule: false,
     });
     setDialogOpen(true);
-  }, [minPriority]);
+  }, [minDisplayPriority]);
 
   const handleRuleFormChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>, idx?: number, type?: "sources" | "destinations") => {
       if (!ruleForm) return;
+      setDialogError(null);
       const { name, value, type: inputType } = e.target;
       const parsedValue = inputType === "number" ? Number(value) : value;
 
@@ -113,20 +115,57 @@ export function useRuleHandlers() {
     });
   }, [ruleForm]);
 
-  const handleDialogSave = useCallback(() => {
+  const handleDialogSave = useCallback(async () => {
     if (!ruleForm) return;
-    try {
-      if (editTarget) {
-        editRule(ruleForm);
-      } else {
-        addRule(ruleForm);
-      }
-      setDialogOpen(false);
-      setEditTarget(null);
-      setError(null);
-    } catch (e: any) {
-      setError(e.message);
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    // Trim name
+    const trimmedName = ruleForm.name.trim();
+    if (!trimmedName) {
+      setDialogError("Rule name is required.");
+      return;
     }
+
+    const validSources = ruleForm.sources.filter(s => s.email.trim());
+      if (validSources.length === 0) {
+        setDialogError("At least one source must have an email.");
+        return;
+      }
+      if (validSources.some(s => !emailRegex.test(s.email.trim()))) {
+        setDialogError("One or more source emails are invalid.");
+        return;
+      }
+
+      const validDestinations = ruleForm.destinations.filter(d => d.email.trim());
+      if (validDestinations.length === 0) {
+        setDialogError("At least one destination must have an email.");
+        return;
+      }
+      if (validDestinations.some(d => !emailRegex.test(d.email.trim()))) {
+        setDialogError("One or more destination emails are invalid.");
+        return;
+      }
+
+      try {
+        const cleanedForm = {
+          ...ruleForm,
+          name: trimmedName,
+          sources: ruleForm.sources.map(s => ({ ...s, email: s.email.trim() })),
+          destinations: ruleForm.destinations.map(d => ({ ...d, email: d.email.trim() })),
+        };
+
+        if (editTarget) {
+          await editRule(cleanedForm);
+        } else {
+          await addRule(cleanedForm);
+        }
+        setDialogOpen(false);
+        setEditTarget(null);
+        setDialogError(null);
+      } catch (e: any) {
+        setDialogError(e.message);
+      }
   }, [ruleForm, editTarget, editRule, addRule]);
 
   const handleSaveChanges = useCallback(async () => {
@@ -141,8 +180,8 @@ export function useRuleHandlers() {
     }
   }, [saveChanges]);
 
-  const handleClearChanges = useCallback(() => {
-    clearChanges();
+  const handleClearChanges = useCallback(async () => {
+    await clearChanges();
     setError(null);
   }, [clearChanges]);
 
@@ -167,6 +206,7 @@ export function useRuleHandlers() {
   return {
     visibleRules,
     error,
+    dialogError,
     dialogOpen,
     ruleForm,
     editTarget,
@@ -174,8 +214,6 @@ export function useRuleHandlers() {
     currentPage,
     pageSize,
     setPageSize,
-    minPriority,
-    maxPriority,
     hasPendingChanges,
     hasMaxPendingChanges,
     loadPage,

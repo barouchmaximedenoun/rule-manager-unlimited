@@ -5,10 +5,13 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
+  
   server: {
+    port: 3000,
+    strictPort: true,  // Pour que ça échoue si 3000 est déjà pris
     proxy: {
       '/rules': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:4001',
         changeOrigin: true,
         secure: false,
       },

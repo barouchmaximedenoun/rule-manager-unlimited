@@ -9,6 +9,7 @@ datasource db {
 
 model Rule {
   id          String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String?     // null => globale
   action      String
   name        String
   sources     Source[]

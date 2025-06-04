@@ -28,3 +28,8 @@ export type RuleUI = Omit<Rule, "priority" | "timestamp"> & {
     isLastRule?: boolean;
     deleted?: boolean;
 };
+
+export type ModifiedRule = RuleUI & {
+    originalIndex: number | null; // null si ajout
+    newIndex: number | null; // null si suppression
+}

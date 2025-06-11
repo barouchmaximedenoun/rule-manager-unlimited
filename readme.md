@@ -16,7 +16,7 @@ This application allows users to manage routing rules with priorities, sources, 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/your-repo-name.git
+git clone https://github.com/barouchmaximedenoun/rule-manager-unlimited.git
 cd your-repo-name
 ```
 

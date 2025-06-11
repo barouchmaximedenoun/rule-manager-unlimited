@@ -92,10 +92,16 @@ export default function App() {
         onEditRule={handleEditRule}
         onDeleteRule={handleDeleteRule}
         onMoveRule={handleMoveRule}
-        isSynching={isSyncing}
+        isSyncing={isSyncing}
         tenantId={tenantId} // Pass tenantId for admin view
+        currentPage={currentPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        totalRulesCount={totalRulesCount}
+        handlePrevPage={handlePrevPage}
+        handleNextPage={handleNextPage}
       />
-      <div className="mt-4 flex justify-between">
+      {/* <div className="mt-4 flex justify-between">
           <div className="mt-2">
             <label>
               Rules per page:{" "}
@@ -122,7 +128,7 @@ export default function App() {
               Next Page
             </Button>
           </div>
-        </div>
+        </div> */}
         <RuleDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}

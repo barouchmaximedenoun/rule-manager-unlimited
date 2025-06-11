@@ -25,16 +25,17 @@ import { getRuleKey } from "../utils/ruleUtils";
 import { GripVertical, Loader } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Pagination } from "./Pagination";
 
 function SortableRow(props: {
   rule: RuleUI;
   index: number;
   onEdit: (rule: RuleUI) => void;
   onDelete: (id: string) => void;
-  isSynching: boolean;
+  isSyncing: boolean;
   tenantId: string;
 }) {
-  const { rule, index, onEdit, onDelete, isSynching, tenantId } = props;
+  const { rule, index, onEdit, onDelete, isSyncing, tenantId } = props;
   const key = getRuleKey(rule);
 
   const {
@@ -58,7 +59,7 @@ function SortableRow(props: {
       <TableCell>{rule.displayPriority } - ({rule.priority})</TableCell>
       {tenantId === 'admin' && <TableCell>{rule.tenantId}</TableCell>}
       <TableCell>
-        {!rule.isLastRule && !isSynching && (
+        {!rule.isLastRule && !isSyncing && (
           <span
             {...attributes}
             {...listeners}
@@ -88,8 +89,8 @@ function SortableRow(props: {
       <TableCell>
         {!rule.isLastRule && (
           <>
-            <Button onClick={() => onEdit(rule)} disabled={isSynching} className="mr-2">Edit</Button>
-            <Button onClick={() => onDelete(key)} disabled={isSynching} variant="destructive">Delete</Button>
+            <Button onClick={() => onEdit(rule)} disabled={isSyncing} className="mr-2">Edit</Button>
+            <Button onClick={() => onDelete(key)} disabled={isSyncing} variant="destructive">Delete</Button>
           </>
         )}
       </TableCell>
@@ -102,8 +103,14 @@ interface RuleTableProps {
   onMoveRule: (fromIdx: number, toIdx: number) => void;
   onEditRule: (rule: RuleUI) => void;
   onDeleteRule: (id: string) => void;
-  isSynching: boolean;
+  isSyncing: boolean;
   tenantId: string; // Added tenantId prop for admin view
+  currentPage: number;
+  pageSize: number;
+  setPageSize: (size: number) => void;
+  totalRulesCount: number;
+  handlePrevPage: () => void;
+  handleNextPage: () => void;
 }
 
 export function RuleTable({
@@ -111,8 +118,14 @@ export function RuleTable({
   onMoveRule,
   onEditRule,
   onDeleteRule,
-  isSynching,
+  isSyncing,
   tenantId, // Added tenantId prop for admin view
+  currentPage,
+  pageSize,
+  setPageSize,
+  totalRulesCount,
+  handlePrevPage,
+  handleNextPage,
 }: RuleTableProps) {
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -159,7 +172,7 @@ export function RuleTable({
                 index={index}
                 onEdit={onEditRule}
                 onDelete={onDeleteRule}
-                isSynching={isSynching}
+                isSyncing={isSyncing}
                 tenantId={tenantId} // Pass tenantId
               />
             ))}
@@ -167,10 +180,18 @@ export function RuleTable({
         </SortableContext>
       </Table>
     </DndContext>
+    <Pagination 
+      currentPage={currentPage}
+      pageSize={pageSize} 
+      setPageSize={setPageSize}
+      totalRulesCount={totalRulesCount}
+      handlePrevPage={handlePrevPage} 
+      handleNextPage={handleNextPage} 
+      isSyncing={isSyncing} />
     <div
       className={cn(
         "absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-300 pointer-events-none",
-        isSynching ? "opacity-100" : "opacity-0"
+        isSyncing ? "opacity-100" : "opacity-0"
       )}
     >
       <div className="bg-white/60 backdrop-blur-sm w-full h-full absolute top-0 left-0" />

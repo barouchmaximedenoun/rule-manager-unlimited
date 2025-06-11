@@ -27,11 +27,11 @@ export default function DummyRulesGenerator({ restartPage, tenantId }: Props) {
       const data = JSON.parse(event.data);
       if(data.message) {
         setMessage(data.message);
+      } else if (data.deleteProgress !== undefined) {
+        setProgress(data.deleteProgress * 0.5); // 50% du total pour la suppression
       } else if (data.progress !== undefined) {
-        if(message) {
-          setMessage("");
-        }
-        setProgress(data.progress);
+        if (message) setMessage("");
+        setProgress(0.5 + data.progress * 0.5); // reste pour la création
       } else if (data.done) {
         setIsRunning(false);
         socket.close();
@@ -71,8 +71,8 @@ export default function DummyRulesGenerator({ restartPage, tenantId }: Props) {
         </button>
       </div>
 
-      {isRunning && message && (
-        <div className="w-full bg-gray-200 h-4 rounded">
+      {isRunning && message !== "" && (
+        <div className="w-full h-4 rounded">
           {message}
         </div>
       )}

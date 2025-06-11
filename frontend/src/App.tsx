@@ -101,48 +101,20 @@ export default function App() {
         handlePrevPage={handlePrevPage}
         handleNextPage={handleNextPage}
       />
-      {/* <div className="mt-4 flex justify-between">
-          <div className="mt-2">
-            <label>
-              Rules per page:{" "}
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="ml-2 p-1 border rounded"
-              >
-                {[10, 25, 50, 100].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </label>
-            <label className="ml-4">
-              Total Rules: {totalRulesCount}
-            </label>
-          </div>
-          <div>
-            <Button onClick={handlePrevPage} disabled={currentPage === 1 || isSyncing}>
-              Previous Page
-            </Button>
-            <span> Page {currentPage} / {Math.ceil(totalRulesCount / pageSize)} </span>
-            <Button onClick={handleNextPage} disabled={isSyncing|| totalRulesCount < (currentPage * pageSize)}>
-              Next Page
-            </Button>
-          </div>
-        </div> */}
-        <RuleDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          rule={ruleForm ?? { tenantId: `${tenantId}`, name: "", action: "Allow", displayPriority: 1, sources: [], destinations: [] }}
-          onChange={handleRuleFormChange}
-          onAddSource={handleAddSource}
-          onAddDestination={handleAddDestination}
-          onSave={handleDialogSave}
-          isEdit={!!editTarget}
-          error={dialogError} 
-          minPriority={1}
-          maxPriority={1_000_000} // Adjust as needed
-          tenantId={tenantId} // Pass tenantId for admin view
-        />
+      <RuleDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        rule={ruleForm ?? { tenantId: `${tenantId}`, name: "", action: "Allow", displayPriority: 1, sources: [], destinations: [] }}
+        onChange={handleRuleFormChange}
+        onAddSource={handleAddSource}
+        onAddDestination={handleAddDestination}
+        onSave={handleDialogSave}
+        isEdit={!!editTarget}
+        error={dialogError} 
+        minPriority={1}
+        maxPriority={1_000_000} // Adjust as needed
+        tenantId={tenantId} // Pass tenantId for admin view
+      />
       </div>
     <Toaster />
   </div>

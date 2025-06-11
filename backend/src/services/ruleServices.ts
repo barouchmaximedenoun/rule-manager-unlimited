@@ -18,6 +18,7 @@ export async function bulkSaveRules(modifiedRules: any[], tenantId: string) {
         operations.push(prisma.rule.upsert({
           where: { id: rule.id },
           update: {
+            tenantId: rule.tenantId ?? tenantId ?? null,
             action: rule.action,
             name: rule.name,
             priority: rule.priority,
@@ -26,7 +27,7 @@ export async function bulkSaveRules(modifiedRules: any[], tenantId: string) {
             destinations: { deleteMany: {}, create: destData },
           },
           create: {
-            tenantId: tenantId || null,
+            tenantId: rule.tenantId ?? tenantId ?? null,
             action: rule.action,
             name: rule.name,
             priority: rule.priority,

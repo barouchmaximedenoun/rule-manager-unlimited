@@ -10,6 +10,17 @@ export default defineConfig({
     port: 3000,
     strictPort: true,  // Pour que ça échoue si 3000 est déjà pris
     proxy: {
+      '/api': {
+        target: 'http://localhost:4001',
+        changeOrigin: true,
+        secure: false,
+        // Optionnel pour le cookie (credentials)
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.setHeader('Origin', 'http://localhost:4001');
+          });
+        }
+      },
       '/rules': {
         target: 'http://localhost:4001',
         changeOrigin: true,

@@ -8,6 +8,7 @@ export type Destination = {
   email: string;
 };
 
+export const DEFAULT_PRIORITY = 1_000_000_001; // 1 milliard 1
 export type RuleAction = "Allow" | "Block";
 
 export type Rule = {

@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth"; // assure-toi que le chemin est correct
 
-export default function Login() {
-  const { login } = useAuth();
+interface LoginProps {
+  login: (tenantId: string, password: string) => Promise<boolean>;
+}
+
+export default function Login({ login }: LoginProps) {
   const [tenantId, setTenantId] = useState("");
   const [password, setPassword] = useState("1234");
   const [error, setError] = useState("");

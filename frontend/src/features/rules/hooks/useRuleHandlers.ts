@@ -2,6 +2,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { RuleUI } from "../types/ruleTypes";
 import { useRuleManager } from "./useRuleManager";
+import { runWithSync } from "../utils/syncUtils";
 
 export function useRuleHandlers() {
   const {
@@ -19,6 +20,7 @@ export function useRuleHandlers() {
     pageSize,
     setPageSize,
     setCurrentPage,
+    totalRulesCount,
   } = useRuleManager();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -26,18 +28,25 @@ export function useRuleHandlers() {
   const [ruleForm, setRuleForm] = useState<RuleUI | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  
 
   const minDisplayPriority = useMemo(() => ((currentPage - 1) * pageSize) + 1, [currentPage, pageSize]);
   const visibleRules = rules.slice(0, pageSize);
 
 
-  const loadPage = useCallback(async (prevPage: number | undefined, page: number) => {
-    try {
-      await fetchPage(prevPage, page);
+  const loadPage = useCallback(async (prevPage: number | null, page: number, prevPageSise: number | null, pageSize: number) => {
+    if( prevPage === page && prevPageSise === pageSize) {
+      // No need to fetch if the page and size haven't changed
+      return;
+    }
+    const { error } = await runWithSync(setIsSyncing, async () => {
+      await fetchPage(prevPage, page, prevPageSise, pageSize);
+    });
+    if(error) {
+      setError(error.message);
+    } else {  
       setError(null);
-    } catch (e: any) {
-      setError(e.message);
     }
   }, [fetchPage]);
 
@@ -58,19 +67,22 @@ export function useRuleHandlers() {
   }, [moveRule]);
 
   const handleDeleteRule = useCallback(async (id: string) => {
-    try {
+    const { error } = await runWithSync(setIsSyncing, async () => {
       await deleteRule(id);
+    });
+    if(error) {
+      setError(error.message);
+    } else {  
       setError(null);
-    } catch (e: any) {
-      setError(e.message);
     }
   }, [deleteRule]);
 
-  const handleAddRuleClick = useCallback(() => {
+  const handleAddRuleClick = useCallback((tenantId: string | null) => {
     setDialogError(null);
     setEditTarget(null);
     setRuleForm({
       tempId: `temp-${Date.now()}`,
+      tenantId,
       name: "",
       action: "Allow",
       sources: [],
@@ -146,62 +158,60 @@ export function useRuleHandlers() {
         setDialogError("One or more destination emails are invalid.");
         return;
       }
-
-      try {
-        const cleanedForm = {
-          ...ruleForm,
-          name: trimmedName,
-          sources: ruleForm.sources.map(s => ({ ...s, email: s.email.trim() })),
-          destinations: ruleForm.destinations.map(d => ({ ...d, email: d.email.trim() })),
-        };
-
+      const cleanedForm = {
+        ...ruleForm,
+        name: trimmedName,
+        sources: ruleForm.sources.map(s => ({ ...s, email: s.email.trim() })),
+        destinations: ruleForm.destinations.map(d => ({ ...d, email: d.email.trim() })),
+      };
+      const { error } = await runWithSync(setIsSyncing, async () => {
         if (editTarget) {
           await editRule(cleanedForm);
-        } else {
+        }
+        else {
           await addRule(cleanedForm);
         }
+      });
+      if(error) {
+        setError(error.message);
+      } else {  
         setDialogOpen(false);
         setEditTarget(null);
         setDialogError(null);
-      } catch (e: any) {
-        setDialogError(e.message);
       }
   }, [ruleForm, editTarget, editRule, addRule]);
 
   const handleSaveChanges = useCallback(async () => {
-    setIsSaving(true);
-    try {
+    const { error } = await runWithSync(setIsSyncing, async () => {
       await saveChanges();
+    });
+    if(error) {
+      setError(error.message);
+    } else {  
       setError(null);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setIsSaving(false);
     }
   }, [saveChanges]);
 
   const handleClearChanges = useCallback(async () => {
-    await clearChanges();
-    setError(null);
+    const { error } = await runWithSync(setIsSyncing, async () => {
+      await clearChanges();
+    });
+    if(error) {
+      setError(error.message);
+    } else {  
+      setError(null);
+    }
   }, [clearChanges]);
 
   const handlePrevPage = useCallback(() => {
-    if (hasPendingChanges()) {
-      alert("Save or clear changes before changing page");
-      return;
-    }
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
-  }, [currentPage, hasPendingChanges, setCurrentPage]);
+  }, [currentPage, setCurrentPage]);
 
   const handleNextPage = useCallback(() => {
-    if (hasPendingChanges()) {
-      alert("Save or clear changes before changing page");
-      return;
-    }
     setCurrentPage(currentPage + 1);
-  }, [currentPage, hasPendingChanges, setCurrentPage]);
+  }, [currentPage, setCurrentPage]);
 
   return {
     visibleRules,
@@ -210,8 +220,9 @@ export function useRuleHandlers() {
     dialogOpen,
     ruleForm,
     editTarget,
-    isSaving,
+    isSyncing,
     currentPage,
+    setCurrentPage,
     pageSize,
     setPageSize,
     hasPendingChanges,
@@ -230,5 +241,6 @@ export function useRuleHandlers() {
     handleClearChanges,
     handlePrevPage,
     handleNextPage,
+    totalRulesCount
   };
 }

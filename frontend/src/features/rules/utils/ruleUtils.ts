@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { ModifiedRule, Rule, RuleUI } from "../types/ruleTypes";
+import { type ModifiedRule, type Rule, type RuleUI, LAST_RULE_PRIORITY } from "../types/ruleTypes";
 
 export function getRuleKey(rule: RuleUI): string {
   return rule.id ?? rule.tempId!;
@@ -25,15 +25,16 @@ export function mergeUniqueKeepFirst<T, U extends string | number>(
 }
 export const fetchRulesAt = async (skip: number, take: number, withCredentials = true) => {
   // call your backend to get the rules at visibleIndex = index
-  const response = await axios.get<Rule[]>(`/rules?skip=${skip}&take=${take}`, {
+  const response = await axios.get<{rules:Rule[], totalCount: number}>(`/rules?skip=${skip}&take=${take}`, {
     withCredentials,
   });
   return response;
 }
-export const fetchPriorityAt = async (skip: number, take: number, withCredentials = true) => {
+export const fetchPriorityAt = async (index: number, take: number, withCredentials = true) => {
+  const skip = index > 0 ? index-1 : 0
   // call your backend to get the rule at visibleIndex = index
   const response = await fetchRulesAt(skip, take, withCredentials);
-  return response.data.map((rule) => (rule?.priority ?? null))
+  return response.data?.rules?.map((rule) => (rule?.priority ?? null))
 };
 // This function computes the real index in the backend based on the visible index target and modified rules.
 // it is used to compute priority for rules that are not in the current page, but also to fetch page rules.
@@ -141,4 +142,71 @@ export function computeAdjustedSkipAndTake(skip: number, take: number, modifiedR
   return { realSkip, realTake: realUntil - realSkip };
 }
 
+export const calculatePriority = (rules: RuleUI[], idx: number): number => {
+  const prevPriority = idx > 0 ? rules[idx-1].priority ?? 0 : 0;
+  const nextPriority = rules[idx+1]?.priority!;
+  return (prevPriority + nextPriority) / 2;
+};
+
+export const updateDisplayPriorities = (updatedRules: RuleUI[], indexOffset: number = 0) => {
+  return updatedRules.map((rule, idx) => ({ ...rule, displayPriority: indexOffset + idx + 1 }));
+};
+
+type SortOption = "priority" | "timestamp";
+
+export function applyModifiedRulesToFetched(
+  fetchedRules: RuleUI[],
+  modifiedRules: Map<string, ModifiedRule>,
+  skip: number,
+  take: number,
+  getRuleKey: (rule: RuleUI | ModifiedRule) => string,
+  secondarySort?: SortOption
+): RuleUI[] {
+  // Step 1 – Clone fetched rules in new Map - for immutability
+  const ruleMap = new Map<string, RuleUI>(
+    fetchedRules.map(rule => [getRuleKey(rule), { ...rule }])
+  );
+
+  // Spet 2 – Apply modifcations by timestamp
+  const sortedModifications = Array.from(modifiedRules.values())
+    .slice() // security to avoid mutating the original map - immutability
+    .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
+    .filter(modifiedRule => {
+      const priority = modifiedRule.priority ?? 0;
+      return priority >= skip && priority < skip + take;
+    });
+
+  for (const modifiedRule of sortedModifications) {
+    const key = getRuleKey(modifiedRule);
+
+    if (modifiedRule.deleted) {
+      ruleMap.delete(key);
+    } else if (modifiedRule.tempId) {
+      ruleMap.set(key, {
+        ...modifiedRule,
+        isLastRule: modifiedRule.priority === LAST_RULE_PRIORITY,
+      });
+    } else {
+      const existingRule = ruleMap.get(key) ?? {};
+        ruleMap.set(key, {
+          ...existingRule,
+          ...modifiedRule,
+          isLastRule: modifiedRule.priority === LAST_RULE_PRIORITY,
+        });
+    }
+  }
+  // Step 3 – Retourn a clean copy and sorted
+  const result = Array.from(ruleMap.values()).sort((a, b) => {
+    const primary = (a.priority ?? 0) - (b.priority ?? 0);
+    if (primary !== 0 || !secondarySort) return primary;
+
+    if (secondarySort === "timestamp") {
+      return (a.timestamp ?? 0) - (b.timestamp ?? 0);
+    }
+
+    return 0;
+  });
+
+  return result ?? [];  
+}
 

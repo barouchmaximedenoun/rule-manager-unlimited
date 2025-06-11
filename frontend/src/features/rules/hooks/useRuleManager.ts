@@ -1,18 +1,18 @@
 //  RuleManager.ts
 import { useState, useCallback } from "react";
 import axios from "axios";
-import type { ModifiedRule, Rule, RuleUI } from "../types/ruleTypes";
-import { computeOutOfRulesPriority, fetchRulesAt, getRuleKey, mergeUniqueKeepFirst, computeAdjustedSkipAndTake } from "../utils/ruleUtils";
+import { LAST_RULE_PRIORITY, type ModifiedRule, type Rule, type RuleUI } from "../types/ruleTypes";
+import { computeOutOfRulesPriority, fetchRulesAt, getRuleKey, mergeUniqueKeepFirst, computeAdjustedSkipAndTake, updateDisplayPriorities, calculatePriority, applyModifiedRulesToFetched } from "../utils/ruleUtils";
 import { useToast } from "@/hooks/use-toast";
 
-const LAST_RULE_PRIORITY = 1000000000; // This is the priority of the last rule, it should not be changed
-const MAX_PENDING_CHANGES = 200; // Maximum number of pending changes before blocking further modifications to avoid timeout in save
+const MAX_PENDING_CHANGES = 50; // Maximum number of pending changes before blocking further modifications to avoid timeout in save
 export function useRuleManager() {
   const { toast } = useToast();
   const [rules, setRules] = useState<RuleUI[]>([]);
   const [modifiedRules, setModifiedRules] = useState<Map<string, ModifiedRule>>(new Map());
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [totalRulesCount, setTotalRulesCount] = useState(0);
   const [maxPendingChanges, ] = useState(MAX_PENDING_CHANGES); // lets open it to the sky but let s keep it for after testing to avoid timeout or let use websocket
 
   const hasPendingChanges = useCallback(() => modifiedRules.size > 0, [modifiedRules]);
@@ -20,100 +20,112 @@ export function useRuleManager() {
   const hasMaxPendingChanges = useCallback(() => modifiedRules.size >= maxPendingChanges, [modifiedRules, maxPendingChanges]);
 
   
-  const fetchPage = useCallback(async (prevPage: number | undefined, page: number) => {
+  const fetchPage = useCallback(async (prevPage: number | null, page: number, prevPageSise: number | null, pageSize: number, options : {ignoreModifiedRules: boolean} = {ignoreModifiedRules: false}) => {
+    if(prevPage === page && prevPageSise === pageSize) {
+      // No need to fetch if the page and size haven't changed
+      return;
+    }
     const skip = (page - 1) * pageSize;
     const take = page === 1 ? pageSize * 2 : pageSize;
 
+    const isNextPage = prevPage === page - 1
+    const isPrevPage = prevPage === page + 1;
+    const isPageSizeChanged = prevPageSise !== pageSize;
     let alreadyLoadedRules: RuleUI[] = [];
     let realSkip = skip;
     let realTake = take;
 
-    if (prevPage === page - 1) {
-      // 👉 NEXT page
-      alreadyLoadedRules = rules.slice(pageSize, pageSize * 2);
-      const alreadyCount = alreadyLoadedRules.length;
+    if(!isPageSizeChanged) {
+      if (isNextPage) {
+        // 👉 NEXT page
+        alreadyLoadedRules = rules.slice(pageSize, pageSize * 2);
+        const alreadyCount = alreadyLoadedRules.length;
 
-      const adjusted = computeAdjustedSkipAndTake(skip + alreadyCount, take - alreadyCount, modifiedRules);
-      realSkip = adjusted.realSkip;
-      realTake = adjusted.realTake;
-    } else if (prevPage === page + 1) {
-      // 👉 PREVIOUS page
-      alreadyLoadedRules = rules.slice(0, pageSize);
-      const alreadyCount = alreadyLoadedRules.length;
-
-      const adjusted = computeAdjustedSkipAndTake(skip, take - alreadyCount, modifiedRules);
-      realSkip = adjusted.realSkip;
-      realTake = adjusted.realTake;
-    } else {
-      // 👉 First load or big jump
-      const adjusted = computeAdjustedSkipAndTake(skip, take, modifiedRules);
-      realSkip = adjusted.realSkip;
-      realTake = adjusted.realTake;
+        const adjusted = computeAdjustedSkipAndTake(skip + alreadyCount, (2 * take) - alreadyCount, modifiedRules);
+        realSkip = adjusted.realSkip;
+        realTake = adjusted.realTake;
+      } else if (isPrevPage) {
+        // 👉 PREVIOUS page
+        alreadyLoadedRules = rules.slice(0, pageSize);
+        const alreadyCount = alreadyLoadedRules.length;
+        const adjusted = computeAdjustedSkipAndTake(skip, (2 * take) - alreadyCount, modifiedRules);
+        realSkip = adjusted.realSkip;
+        realTake = adjusted.realTake;
+      } else {
+        // 👉 First load or big jump
+        const adjusted = computeAdjustedSkipAndTake(skip, take, modifiedRules);
+        realSkip = adjusted.realSkip;
+        realTake = adjusted.realTake;
+      }
     }
 
-    console.log("Fetching page", page, "skip", skip, "realSkip", realSkip, "realTake", realTake);
+    console.log("Fetching page", page, "skip", skip, "take", take, "realSkip", realSkip, "realTake", realTake);
     const response = await fetchRulesAt(realSkip, realTake);
     
-    const newRules: RuleUI[] = response.data.map((rule, index) => ({
-      ...rule,
-      displayPriority: (page - 1) * pageSize + index + 1,
-      sources: rule.sources ?? [],
-      destinations: rule.destinations ?? [],
-      isLastRule: rule.priority === LAST_RULE_PRIORITY,
-    }));
+    let newRules: RuleUI[] = response.data?.rules?.map((rule, index) => {
+      // If not modified, use the default display priority 
+      return {
+        ...rule,
+        displayPriority: (page - 1) * pageSize + index + 1,
+        sources: rule.sources ?? [],
+        destinations: rule.destinations ?? [],
+        isLastRule: rule.priority === LAST_RULE_PRIORITY,
+    }});
 
-    if (prevPage === page - 1 || prevPage === page + 1) {
-      setRules(mergeUniqueKeepFirst<RuleUI, string>([alreadyLoadedRules, newRules], getRuleKey));
-    } else {
-      setRules(newRules); // ✅ Remplace tout si première fois ou saut de page
+    if (!isPageSizeChanged && (isNextPage || isPrevPage)) {
+      if(isNextPage ) { //next page
+        newRules = mergeUniqueKeepFirst<RuleUI, string>([alreadyLoadedRules, newRules], getRuleKey);
+      }
+      else { //previous page
+        newRules = mergeUniqueKeepFirst<RuleUI, string>([newRules, alreadyLoadedRules], getRuleKey);
+      }
+    } 
+    let count = response.data?.totalCount ?? 0;
+    if(!options.ignoreModifiedRules) {
+      newRules = applyModifiedRulesToFetched(
+        newRules,
+        modifiedRules,
+        skip,
+        take,
+        getRuleKey,
+        "timestamp" // optionnel: secondary sort key
+      );
+      Array.from(modifiedRules.values()).forEach(rule => {
+        if(rule.deleted) {
+          count--; // Decrement count for deleted rules
+        } else if(rule.tempId) {
+          count++; // Increment count for new rules
+        } 
+      });
     }
-  }, [pageSize]);
+    setTotalRulesCount(count);
+    setRules(updateDisplayPriorities(newRules, skip));
+  }, [rules, modifiedRules]);
 
-  const updateDisplayPriorities = useCallback((updatedRules: RuleUI[]) => {
-    return updatedRules.map((rule, idx) => ({ ...rule, displayPriority: idx + 1 }));
-  }, []);
-
-  // we calculate the priority after changing the rules
-  const calculatePriority = useCallback((rules: RuleUI[], idx: number): number => {
-    const prevPriority = idx > 0 ? rules[idx-1].priority ?? 0 : 0;
-    const nextPriority = rules[idx+1]?.priority!;
-    return (prevPriority + nextPriority) / 2;
-  }, []);
-
-  const addRule = useCallback(async (newRule: Omit<RuleUI, "id" | "priority" | "timestamp">) => {
-    if (hasMaxPendingChanges()) throw new Error("Save or clear changes before adding a new rule");
-    
-    const displayPriority = newRule.displayPriority;
-    const tempId = `temp-${Date.now()}`;
-    const timestamp = Date.now();
-
-    const pageMinVisibleIndex = (currentPage - 1) * pageSize + 1;
-    const pageMaxVisibleIndex = pageMinVisibleIndex + rules.length - 1;
-
-    const isInPageRange =
-      displayPriority >= pageMinVisibleIndex &&
-      displayPriority <= pageMaxVisibleIndex;
-
-    const baseRule: RuleUI = {
-      ...newRule,
-      tempId,
-      timestamp,
-      displayPriority,
-      isLastRule: false,
-    };
-
-    let updatedRules = [...rules];
+  const insertOrMoveRule = useCallback(async (
+    baseRule: RuleUI,
+    ruleIndex?: number // when editing an existing rule, this is the index in the current rules array
+  ) => {
+    const displayPriority = baseRule.displayPriority;
     const modMap = new Map(modifiedRules);
+    const pageMinVisibleIndex = (currentPage - 1) * pageSize + 1;
+    const pageMaxRulesIndex = pageMinVisibleIndex + rules.length - 1;
+    
+    const isInRulesRange = displayPriority >= pageMinVisibleIndex && displayPriority <= pageMaxRulesIndex;
+    let updated = [...rules];
+
+    if (ruleIndex !== undefined) {
+      updated.splice(ruleIndex, 1);
+      modMap.delete(getRuleKey(baseRule));
+    }
 
     let priority: number;
-
-    if (isInPageRange) {
-      // ✅ simple case: insert in page
+    if (isInRulesRange) {
       const toIdx = displayPriority - pageMinVisibleIndex;
-      updatedRules.splice(toIdx, 0, baseRule);
-      priority = calculatePriority(updatedRules, toIdx);
+      updated.splice(toIdx, 0, baseRule);
+      priority = calculatePriority(updated, toIdx);
+      updated[toIdx].priority = priority;
     } else {
-      // ✅ complexe case : insert out of page
       const { priority: computedPriority } = await computeOutOfRulesPriority(
         currentPage,
         pageSize,
@@ -130,30 +142,51 @@ export function useRuleManager() {
       timestamp: Date.now(),
     };
 
-    if (isInPageRange) {
-      const toIdx = displayPriority - pageMinVisibleIndex;
-      updatedRules[toIdx] = completeRule;
-      const adjusted = updateDisplayPriorities(updatedRules);
-      setRules(adjusted);
+    if (isInRulesRange || ruleIndex !== undefined) {
+      const finalUpdated = updateDisplayPriorities(updated, pageMinVisibleIndex - 1);
+      setRules(finalUpdated);
     }
 
     const modifiedEntry: ModifiedRule = {
       ...completeRule,
-      originalIndex: null,
-      newIndex: isInPageRange ? displayPriority - 1 : null,
+      originalIndex: ruleIndex ? modMap.get(getRuleKey(baseRule))?.originalIndex ?? (pageMinVisibleIndex + ruleIndex) : null,
+      newIndex: displayPriority,
     };
-    modMap.set(tempId, modifiedEntry);
+
+    modMap.set(getRuleKey(completeRule), modifiedEntry);
     setModifiedRules(modMap);
-  }, [rules, hasMaxPendingChanges, calculatePriority, modifiedRules, updateDisplayPriorities, currentPage, pageSize]);
+  }, [rules, modifiedRules, currentPage, pageSize]);
+
+  const addRule = useCallback(async (newRule: Omit<RuleUI, "id" | "priority" | "timestamp">) => {
+    if (hasMaxPendingChanges()) throw new Error("Save or clear changes before adding a new rule");
+    
+    //const displayPriority = newRule.displayPriority;
+    const tempId = `temp-${Date.now()}`;
+    const timestamp = Date.now();
+
+    const baseRule: RuleUI = {
+      ...newRule,
+      tempId,
+      timestamp,
+      //displayPriority,
+      isLastRule: false,
+    };
+
+    await insertOrMoveRule(baseRule); 
+    setTotalRulesCount(count => count + 1); // Increment total count for new rule
+  }, [rules, hasMaxPendingChanges, modifiedRules, currentPage, pageSize]);
 
   const editRule = useCallback(async (edited: RuleUI) => {
+    if (hasMaxPendingChanges()) throw new Error("Save or clear changes before adding a new rule");
     const index = rules.findIndex(r => getRuleKey(r) === getRuleKey(edited));
     if (index === -1) throw new Error("Rule not found");
     if (rules[index].isLastRule) throw new Error("Cannot edit the last fixed rule");
 
     edited.timestamp = Date.now();
-
-    const shouldMove = edited.displayPriority !== index + 1;
+    
+    const pageMinVisibleIndex = (currentPage - 1) * pageSize + 1;
+    const displayIndex = pageMinVisibleIndex + index
+    const shouldMove = edited.displayPriority !== displayIndex;
 
     if (!shouldMove) {
       const updated = [...rules];
@@ -163,8 +196,8 @@ export function useRuleManager() {
       const newMap = new Map(modifiedRules);
       newMap.set(getRuleKey(edited), {
         ...edited,
-        originalIndex: index,
-        newIndex: index
+        originalIndex: displayIndex,
+        newIndex: displayIndex
       });
       setModifiedRules(newMap);
       return;
@@ -172,70 +205,17 @@ export function useRuleManager() {
     // -------------------------------------
     // 🧠 Step 2 : moving the rule
     // -------------------------------------
-
-    const updated = [...rules];
-    updated.splice(index, 1); // remove the rule
-    
-    let newPriority: number;
-
-    const pageMinVisibleIndex = (currentPage - 1) * pageSize + 1;
-    const pageMaxVisibleIndex = pageMinVisibleIndex + rules.length - 1;
-
-    const isInPageRange = edited.displayPriority >= pageMinVisibleIndex &&
-                          edited.displayPriority <= pageMaxVisibleIndex;
-
-    const toIdx = edited.displayPriority - pageMinVisibleIndex;
-    const ruleKey = getRuleKey(edited);
-    const modMap = new Map(modifiedRules);
-
-    let originalIndex = index;
-    if(modMap.has(ruleKey)) {
-      originalIndex = modMap.get(ruleKey)?.originalIndex ?? index;
-    }
-    modMap.delete(ruleKey); // ⚠️ IMPORTANT : remove temporary for correct calculation
-
-    if (isInPageRange) {
-      // ✅ Simple case : move inside the page
-      newPriority = calculatePriority(updated, toIdx);
-    } else {
-      // ✅ Complexe case : move out of the page
-      const { priority } = await computeOutOfRulesPriority(
-        currentPage,
-        pageSize,
-        edited.displayPriority,
-        modMap,
-        rules
-      );
-      newPriority = priority;
-    }
-
-    const movedUpdated: RuleUI = {
-      ...edited,
-      priority: newPriority,
-      timestamp: Date.now(),
-    };
-
-    // update the aray
-    if (isInPageRange) {
-      updated.splice(toIdx, 0, movedUpdated); // insert to new position
-      const finalUpdated = updateDisplayPriorities(updated);
-      setRules(finalUpdated);
-    }
-    
-    const modifiedEntry: ModifiedRule = {
-      ...movedUpdated,
-      originalIndex,
-      newIndex: edited.displayPriority - 1
-    };
-    modMap.set(ruleKey, modifiedEntry);
-    setModifiedRules(modMap);
-  }, [rules, modifiedRules, currentPage, pageSize, calculatePriority]);
+    const baseRule: RuleUI = { ...edited, timestamp: Date.now() };
+    await insertOrMoveRule(baseRule, index ); 
+  }, [rules, hasMaxPendingChanges, modifiedRules, currentPage, pageSize]);
 
   const deleteRule = useCallback(async (ruleId: string) => {
+    if (hasMaxPendingChanges()) throw new Error("Save or clear changes before adding a new rule");
     const index = rules.findIndex(r => getRuleKey(r) === ruleId);
     if (index === -1) throw new Error("Rule not found");
     if (rules[index].isLastRule) throw new Error("Cannot delete the last fixed rule");
 
+    const pageMinVisibleIndex = (currentPage - 1) * pageSize + 1;
     const updated = [...rules];
     const [deletedRule] = updated.splice(index, 1);
 
@@ -258,7 +238,7 @@ export function useRuleManager() {
     const lastRule = updated[updated.length - 1];
     const canFetchMore = !lastRule?.isLastRule && updated.length === pageSize + 2;
 
-    let finalRules = updateDisplayPriorities(updated);
+    let finalRules = updateDisplayPriorities(updated, pageMinVisibleIndex - 1);
 
     if (canFetchMore) {
       const missing = pageSize - updated.length;
@@ -267,7 +247,7 @@ export function useRuleManager() {
         const { realSkip, realTake } = computeAdjustedSkipAndTake(skip, missing, newMap);
         const response = await fetchRulesAt(realSkip, realTake);
 
-        const newRules = response.data.map((rule, i) => ({
+        const newRules = response.data.rules.map((rule, i) => ({
           ...rule,
           displayPriority: finalRules.length + i + 1,
           sources: rule.sources ?? [],
@@ -275,19 +255,21 @@ export function useRuleManager() {
           isLastRule: rule.priority === LAST_RULE_PRIORITY,
         }));
 
-        finalRules = updateDisplayPriorities([...finalRules, ...newRules]);
+        finalRules = updateDisplayPriorities([...finalRules, ...newRules], pageMinVisibleIndex - 1);
       }
     }
-
+    setTotalRulesCount(count => count - 1); // Decrement total count for deleted rule
     setRules(finalRules);
     setModifiedRules(newMap);
-  }, [rules, modifiedRules, updateDisplayPriorities, pageSize, currentPage]);
+  }, [rules, hasMaxPendingChanges, modifiedRules, pageSize, currentPage]);
 
 
 
   const moveRule = useCallback((fromIdx: number, toIdx: number) => {
+    if (hasMaxPendingChanges()) throw new Error("Save or clear changes before adding a new rule");
     if (fromIdx === toIdx) return;
     if (rules[fromIdx].isLastRule || rules[toIdx]?.isLastRule) throw new Error("Cannot move the last fixed rule");
+    const pageMinVisibleIndex = (currentPage - 1) * pageSize + 1;
     let updated = [...rules];
     const [moved] = updated.splice(fromIdx, 1);
     updated.splice(toIdx, 0, moved);
@@ -295,7 +277,7 @@ export function useRuleManager() {
     console.log("New priority:", newPriority);
     updated[toIdx].priority = newPriority;
     updated[toIdx].timestamp = Date.now();
-    updated = updateDisplayPriorities(updated);
+    updated = updateDisplayPriorities(updated, pageMinVisibleIndex - 1);
     console.log("New updated:", updated);
     setRules(updated);
     const ruleKey = getRuleKey(updated[toIdx]);
@@ -310,7 +292,7 @@ export function useRuleManager() {
       newIndex: toIdx,
     });
     setModifiedRules(newMap);
-  }, [rules, modifiedRules, updateDisplayPriorities, calculatePriority]);
+  }, [rules, hasMaxPendingChanges, modifiedRules, currentPage, pageSize]);
 
   const toBackendRule = useCallback((rule: RuleUI): Rule => {
     return {
@@ -322,6 +304,7 @@ export function useRuleManager() {
       priority: rule.priority ?? 0,
       timestamp: rule.timestamp ?? Date.now(),
       ...(rule.deleted ? { deleted: true } : {}),
+      ...(rule.tenantId ? { tenantId: rule.tenantId } : {}),
     };
   }, []);
 
@@ -339,7 +322,7 @@ export function useRuleManager() {
         withCredentials: true
       });
 
-      await fetchPage(undefined, currentPage);
+      await fetchPage(null, currentPage, pageSize, pageSize);
       setModifiedRules(new Map()); // Clear modified rules after successful save
       toast({
               title: "✅ Save succesfull",
@@ -349,12 +332,13 @@ export function useRuleManager() {
       console.error("Failed to save rules:", error);
       // Optionnel : show toast, set error state, etc.
     }
-  }, [modifiedRules, fetchPage, currentPage, hasPendingChanges, toBackendRule]);
+  }, [modifiedRules, fetchPage, currentPage, pageSize, hasPendingChanges, toBackendRule]);
 
   const clearChanges = useCallback(async () => {
       setModifiedRules(new Map());
-      await fetchPage(undefined, currentPage);
-  }, [fetchPage, currentPage]);
+      const options = { ignoreModifiedRules: true };
+      await fetchPage(null, currentPage, pageSize, pageSize, options);
+  }, [fetchPage, currentPage, pageSize]);
 
   return {
     rules,
@@ -371,5 +355,6 @@ export function useRuleManager() {
     setCurrentPage,    
     pageSize,
     setPageSize,
+    totalRulesCount,
   };
 }

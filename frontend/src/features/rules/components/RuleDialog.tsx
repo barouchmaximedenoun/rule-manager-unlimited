@@ -20,6 +20,7 @@ interface RuleDialogProps {
   minPriority?: number;
   maxPriority?: number;
   error?: string | null;
+  tenantId: string;
 }
 
 export function RuleDialog({
@@ -34,6 +35,7 @@ export function RuleDialog({
   minPriority,
   maxPriority,
   error,
+  tenantId, // Default to "admin" if not provided
 }: RuleDialogProps) {
   let priorityRange: string = ''
   if(minPriority !== undefined && maxPriority !== undefined) {
@@ -55,7 +57,15 @@ export function RuleDialog({
             {...(minPriority !== undefined && maxPriority !== undefined ? { max: maxPriority } : {})}
             onChange={(e) => onChange(e)}
           />
-
+          {/* Tenant ID */}
+          {tenantId === "admin" && (
+            <Input
+              name="tenantId"
+              placeholder="Tenant ID"
+              value={rule.tenantId ?? ""}
+              onChange={(e) => onChange(e)}
+            />
+          )}
           {/* Action */}
           <select
             name="action"

@@ -1,23 +1,36 @@
 import { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 
-export default function DummyRulesGenerator() {
+type Props = {
+  restartPage: () => void;
+  tenantId: string;
+}
+
+export default function DummyRulesGenerator({ restartPage, tenantId }: Props) {
   const [count, setCount] = useState<number>(1000);
   const [progress, setProgress] = useState<number>(0);
+  const [message, setMessage] = useState<string>("");
   const [isRunning, setIsRunning] = useState(false);
   const { toast } = useToast();
 
   const createDummyRules = (count: number) => {
-    const socket = new WebSocket('ws://localhost:4000');
+    const socket = new WebSocket('ws://localhost:4001');
 
     socket.onopen = () => {
+      setMessage("");
+      setProgress(0);
       setIsRunning(true);
-      socket.send(JSON.stringify({ count }));
+      socket.send(JSON.stringify({ count, tenantId }));
     };
 
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.progress !== undefined) {
+      if(data.message) {
+        setMessage(data.message);
+      } else if (data.progress !== undefined) {
+        if(message) {
+          setMessage("");
+        }
         setProgress(data.progress);
       } else if (data.done) {
         setIsRunning(false);
@@ -26,6 +39,9 @@ export default function DummyRulesGenerator() {
             title: "✅ Génération succesfull",
             description: `${count} have been generated on the server successfully.`,
           });
+        setTimeout(() => {
+          restartPage();
+        }, 1000); // Restart page after 1 second
         // Optionnel : refresh la liste des règles ici si tu veux
       }
     };
@@ -54,6 +70,12 @@ export default function DummyRulesGenerator() {
           Lancer
         </button>
       </div>
+
+      {isRunning && message && (
+        <div className="w-full bg-gray-200 h-4 rounded">
+          {message}
+        </div>
+      )}
 
       {isRunning && (
         <div className="w-full bg-gray-200 h-4 rounded">

@@ -7,20 +7,21 @@ import { Router, Request, Response } from "express";
 const router = Router();
 
 router.post('/api/login', async(req: Request, res: Response) => {
+  console.log("in Login")
   const { tenantId, password } = req.body;
-
-  // ici on simule sans vraie vérification de mot de passe
+  console.log('Login attempt:', { tenantId, password, SECRET });
   if (!tenantId || password !== '1234') {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const token = jwt.sign({ tenantId }, SECRET, { expiresIn: '1h' });
+  const token = jwt.sign({ tenantId }, SECRET, { expiresIn: '12h' });
+  console.log('Login token:', { token });
   // res.json({ token });
   res.cookie('token', token, {
     httpOnly: true,
-    secure: true,         // obligatoire en production (HTTPS)
+    secure: process.env.NODE_ENV === 'production', //true,         // obligatoire en production (HTTPS)
     sameSite: 'lax',      // ou 'strict' selon tes besoins
-    maxAge: 3600000  * 12     // 1h par exemple
+    maxAge: 3600000  * 12     // 12h par exemple
   });
   res.json({ success: true });
 });
@@ -40,7 +41,7 @@ router.get('/api/me', (req: Request, res: Response) => {
 router.post('/api/logout', (req, res) => {
   res.clearCookie('token', {
     httpOnly: true,
-    secure: true,   // pareil que dans le login
+    secure: process.env.NODE_ENV === 'production', //true,   // pareil que dans le login
     sameSite: 'lax',
   });
   res.sendStatus(200);

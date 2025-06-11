@@ -22,15 +22,19 @@ import {
 } from "@/components/ui/table";
 import type { RuleUI } from "../types/ruleTypes";
 import { getRuleKey } from "../utils/ruleUtils";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Loader } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 
 function SortableRow(props: {
   rule: RuleUI;
   index: number;
   onEdit: (rule: RuleUI) => void;
   onDelete: (id: string) => void;
+  isSynching: boolean;
+  tenantId: string;
 }) {
-  const { rule, index, onEdit, onDelete } = props;
+  const { rule, index, onEdit, onDelete, isSynching, tenantId } = props;
   const key = getRuleKey(rule);
 
   const {
@@ -52,8 +56,9 @@ function SortableRow(props: {
   return (
     <TableRow ref={setNodeRef} style={style}>
       <TableCell>{rule.displayPriority } - ({rule.priority})</TableCell>
+      {tenantId === 'admin' && <TableCell>{rule.tenantId}</TableCell>}
       <TableCell>
-        {!rule.isLastRule && (
+        {!rule.isLastRule && !isSynching && (
           <span
             {...attributes}
             {...listeners}
@@ -83,8 +88,8 @@ function SortableRow(props: {
       <TableCell>
         {!rule.isLastRule && (
           <>
-            <Button onClick={() => onEdit(rule)} className="mr-2">Edit</Button>
-            <Button onClick={() => onDelete(key)} variant="destructive">Delete</Button>
+            <Button onClick={() => onEdit(rule)} disabled={isSynching} className="mr-2">Edit</Button>
+            <Button onClick={() => onDelete(key)} disabled={isSynching} variant="destructive">Delete</Button>
           </>
         )}
       </TableCell>
@@ -97,6 +102,8 @@ interface RuleTableProps {
   onMoveRule: (fromIdx: number, toIdx: number) => void;
   onEditRule: (rule: RuleUI) => void;
   onDeleteRule: (id: string) => void;
+  isSynching: boolean;
+  tenantId: string; // Added tenantId prop for admin view
 }
 
 export function RuleTable({
@@ -104,6 +111,8 @@ export function RuleTable({
   onMoveRule,
   onEditRule,
   onDeleteRule,
+  isSynching,
+  tenantId, // Added tenantId prop for admin view
 }: RuleTableProps) {
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -119,6 +128,7 @@ export function RuleTable({
   }
 
   return (
+    <>
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -128,6 +138,7 @@ export function RuleTable({
         <TableHeader>
           <TableRow>
             <TableHead>Priority</TableHead>
+            {tenantId === 'admin' && <TableHead>Tenant</TableHead>}
             <TableHead>Drag</TableHead>
             <TableHead>Action</TableHead>
             <TableHead>Name</TableHead>
@@ -148,11 +159,23 @@ export function RuleTable({
                 index={index}
                 onEdit={onEditRule}
                 onDelete={onDeleteRule}
+                isSynching={isSynching}
+                tenantId={tenantId} // Pass tenantId
               />
             ))}
           </TableBody>
         </SortableContext>
       </Table>
     </DndContext>
+    <div
+      className={cn(
+        "absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-300 pointer-events-none",
+        isSynching ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div className="bg-white/60 backdrop-blur-sm w-full h-full absolute top-0 left-0" />
+      <Loader className="h-8 w-8 animate-spin text-muted-foreground z-10" />
+    </div>
+    </>
   );
 }

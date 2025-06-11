@@ -2,12 +2,12 @@
 
 ## Description
 
-This application allows managing routing rules with priorities, sources, and destinations. It supports drag-and-drop reordering. All changes are kept in memory and saved to the database only when clicking the **Save** button.
+This application allows users to manage routing rules with priorities, sources, and destinations. It supports drag-and-drop reordering. All changes are kept in memory and only persisted to the database when the **Save** button is clicked.
 
 ## Technologies
 
-- **Frontend**: React, Tailwind CSS, DnD Kit
-- **Backend**: Node.js, Express, MongoDB (Replica Set)
+- **Frontend**: React, Tailwind CSS, DnD Kit  
+- **Backend**: Node.js, Express, MongoDB (Replica Set) with Prisma ORM
 
 ---
 
@@ -20,56 +20,87 @@ git clone https://github.com/your-username/your-repo-name.git
 cd your-repo-name
 ```
 
-### 2. install
+### 2. Install dependencies
+
 ```bash
 cd backend
 npm install
 
 cd ../frontend
-npm install 
+npm install
 ```
-### 3. Mongodb
-```bash
-mkdir -p backend/data/db
-mongod --dbpath backend/data/db --replSet rs0
 
-in separate terminal
-mongo
-> rs.initiate()
-You should see { "ok" : 1 } if the replica set was successfully initialized.
+### 3. Start MongoDB (with replica set)
+
+```bash
+cd ../backend
+mkdir -p data/db
+mongod --port 27019 --dbpath data/db --replSet rs0
 ```
-### 4. start backend
+
+In a separate terminal:
+
+```bash
+mongo --port 27019
+> rs.initiate()
+```
+
+You should see `{ "ok" : 1 }` if the replica set was successfully initialized.
+
+Then:
+
+```bash
+mongosh --port 27019
+use rulesdb
+
+db.Source.createIndex({ ruleId: 1 })
+db.Destination.createIndex({ ruleId: 1 })
+db.Rule.createIndex({ tenantId: 1, priority: 1 })
+```
+
+### 4. Start the backend
+
 ```bash
 cd backend
-
 cp .env.example .env
-Edit .env to include your real environment values, if different
-Make sure your .env contains the correct DATABASE_URL for MongoDB (or your actual database).
+# Edit .env if needed — ensure it includes the correct DATABASE_URL and JWT_SECRET
 
 npx prisma generate
 npx prisma migrate dev --name init
 
-Run npx prisma generate after every schema change.
-
-Run migrations with npx prisma migrate dev to update the database schema.
+# Run this after every schema change
+npx prisma generate
 
 npm start
-
-it will run on http://localhost:4000
-
 ```
-### 5. start front end
+
+The backend will be running on: [http://localhost:4001](http://localhost:4001)
+
+### 5. Start the frontend
+
 ```bash
 cd frontend
 npm run dev
-launch the browser and see result
 ```
-### 6.Done
-- support for tennant
-- able to edit priority or add a rule with priority outside the current page
-- ...
-### 7.Todo
-- ...
 
-### 8. Notes
-Backend uses MongoDB transactions, so a replica set is required even for local development.
+Open your browser at [http://localhost:3000](http://localhost:3000) (or whichever port Vite outputs).
+
+---
+
+## Features
+
+- Multi-tenant support
+- Rule editing and priority reordering (including cross-page insertion)
+- Drag-and-drop with full keyboard accessibility
+- Changes tracked in-memory before saving
+
+## Todo
+
+- Undo/Redo history
+- Batch import/export
+- Role-based access control
+- Tests (unit/integration)
+
+## Notes
+
+> The backend uses MongoDB transactions, which require a replica set — even for local development.
